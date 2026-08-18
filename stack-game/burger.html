@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ハンバーガー積みゲーム</title>
+<style>
+  body {
+    font-family: sans-serif;
+    text-align: center;
+    padding-top: 20px;
+    background: #222;
+    color: #eee;
+  }
+  h1 {
+    margin-bottom: 4px;
+  }
+  #score {
+    font-size: 1.4em;
+    margin-bottom: 8px;
+  }
+  canvas {
+    background: #333;
+    border: 2px solid #555;
+    border-radius: 6px;
+    display: block;
+    margin: 0 auto;
+  }
+  #judgement {
+    height: 1.6em;
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #f4c542;
+    opacity: 0;
+    transition: opacity 0.2s;
+    margin-top: 6px;
+  }
+  #judgement.show {
+    opacity: 1;
+  }
+  #hint {
+    color: #999;
+    margin-top: 6px;
+  }
+  button {
+    font-size: 1.2em;
+    padding: 8px 20px;
+    margin: 10px 4px 0;
+  }
+  button:disabled {
+    opacity: 0.4;
+  }
+</style>
+</head>
+<body>
+  <h1>ハンバーガー積みゲーム</h1>
+  <div id="score">積んだ具材: 0</div>
+  <canvas id="canvas" width="400" height="600"></canvas>
+  <div id="judgement"></div>
+  <div>
+    <button id="startBtn">スタート</button>
+    <button id="dropBtn" disabled>ドロップ</button>
+  </div>
+  <p id="hint">スペースキーまたはキャンバスのクリックでも操作できます</p>
+
+  <script>
+    const CANVAS_W = 400;
+    const CANVAS_H = 600;
+    const BLOCK_HEIGHT = 30;
+    const INITIAL_WIDTH = 160;
+    const MOVE_SPEED = 150; // px/秒（一定速度）
+    const ACTIVE_SCREEN_Y = 150; // 落とす直前の具材が表示される画面上のY座標
+    const PERFECT_TOLERANCE = 4; // px、これ以内のズレなら「ピッタリ」扱い
+    const TOP_BUN_HEIGHT = 40;
+
+    const BUN = { name: "バンズ", color: "#d9a466" };
+    const INGREDIENTS = [
+      { name: "パティ", color: "#6b3f2a" },
+      { name: "チーズ", color: "#f7d34a" },
+      { name: "トマト", color: "#d94f4f" },
+      { name: "レタス", color: "#7cb342" },
+    ];
+
+    function randomIngredient() {
+      return INGREDIENTS[Math.floor(Math.random() * INGREDIENTS.length)];
+    }
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const judgeEl = document.getElementById("judgement");
+    const startBtn = document.getElementById("startBtn");
+    const dropBtn = document.getElementById("dropBtn");
+
+    let stack = [];
+    let movingBlock = null;
+    let direction = 1;
+    let state = "ready"; // ready | playing | gameover
+    let judgeTimeoutId = null;
+
+    function resetStack() {
+      stack = [{
+        x: (CANVAS_W - INITIAL_WIDTH) / 2,
+        width: INITIAL_WIDTH,
+        color: BUN.color,
+        name: BUN.name,
+      }];
+    }
+
+    function spawnMovingBlock() {
+      const top = stack[stack.length - 1];
+      const ing = randomIngredient();
+      movingBlock = { x: 0, width: top.width, color: ing.color, name: ing.name };
+      direction = 1;
+    }
+
+    function startGame() {
+      resetStack();
+      state = "playing";
+      spawnMovingBlock();
+      updateUI();
+    }
+
+    function showJudgement(text) {
+      clearTimeout(judgeTimeoutId);
+      judgeEl.textContent = text;
+      judgeEl.classList.add("show");
+      judgeTimeoutId = setTimeout(() => judgeEl.classList.remove("show"), 500);
+    }
+
+    function dropBlock() {
+      const top = stack[stack.length - 1];
+      const left = Math.max(movingBlock.x, top.x);
+      const right = Math.min(movingBlock.x + movingBlock.width, top.x + top.width);
+      const overlap = right - left;
+
+      if (overlap <= 0) {
+        state = "gameover";
+        updateUI();
+        return;
+      }
+
+      const trimmed = movingBlock.width - overlap;
+      let newBlock;
+      if (trimmed <= PERFECT_TOLERANCE) {
+        newBlock = { x: top.x, width: top.width, color: movingBlock.color, name: movingBlock.name };
+        showJudgement("PERFECT!");
+      } else {
+        newBlock = { x: left, width: overlap, color: movingBlock.color, name: movingBlock.name };
+      }
+
+      stack.push(newBlock);
+      spawnMovingBlock();
+      updateUI();
+    }
+
+    function handleStart() {
+      startGame();
+    }
+
+    function handleDrop() {
+      if (state === "playing") dropBlock();
+    }
+
+    // スペースキー/キャンバスクリックは状態に応じてスタートかドロップを兼ねる
+    function handleAction() {
+      if (state === "playing") {
+        dropBlock();
+      } else {
+        startGame();
+      }
+    }
+
+    function updateUI() {
+      scoreEl.textContent = "積んだ具材: " + (stack.length - 1);
+      startBtn.textContent = state === "gameover" ? "リスタート" : "スタート";
+      dropBtn.disabled = state !== "playing";
+    }
+
+    function worldYToScreenY(worldY, topWorldY) {
+      return ACTIVE_SCREEN_Y + BLOCK_HEIGHT + (worldY - topWorldY);
+    }
+
+    // トップバンズ（丸パン）を描く。localY はバンズ底面（一番上の具材との接地面）のローカルY座標
+    function drawTopBun(localY) {
+      const width = INITIAL_WIDTH * 0.9;
+
+      ctx.beginPath();
+      ctx.moveTo(-width / 2, localY);
+      ctx.quadraticCurveTo(-width / 2, localY - TOP_BUN_HEIGHT, 0, localY - TOP_BUN_HEIGHT);
+      ctx.quadraticCurveTo(width / 2, localY - TOP_BUN_HEIGHT, width / 2, localY);
+      ctx.closePath();
+      ctx.fillStyle = BUN.color;
+      ctx.fill();
+      ctx.strokeStyle = "#b8834a";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // ごま
+      const seedOffsets = [-0.3, -0.1, 0.05, 0.2, 0.35];
+      ctx.fillStyle = "#fff6df";
+      seedOffsets.forEach((f) => {
+        ctx.beginPath();
+        ctx.ellipse(f * width, localY - TOP_BUN_HEIGHT * 0.55, 4, 2, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // GameOver後、全段＋トップバンズが収まるようにズームアウトして描画
+    function drawZoomedOutResult() {
+      const PADDING_TOP = 50;
+      const PADDING_BOTTOM = 20;
+
+      const top = -(stack.length - 1) * BLOCK_HEIGHT; // 一番上の具材の上端
+      const peak = top - TOP_BUN_HEIGHT; // トップバンズのてっぺん
+      const bottom = BLOCK_HEIGHT; // バンズ(土台)の底
+      const totalHeight = bottom - peak;
+      const availableHeight = CANVAS_H - PADDING_TOP - PADDING_BOTTOM;
+      const scale = availableHeight / totalHeight;
+
+      ctx.save();
+      ctx.translate(CANVAS_W / 2, PADDING_TOP);
+      ctx.scale(scale, scale);
+
+      for (let i = 0; i < stack.length; i++) {
+        const block = stack[i];
+        const worldY = -i * BLOCK_HEIGHT;
+        const localY = worldY - peak;
+        ctx.fillStyle = block.color;
+        ctx.fillRect(block.x - CANVAS_W / 2, localY, block.width, BLOCK_HEIGHT);
+      }
+
+      drawTopBun(top - peak);
+
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+      if (state === "gameover") {
+        drawZoomedOutResult();
+
+        ctx.fillStyle = "#f55";
+        ctx.font = "26px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", CANVAS_W / 2, 30);
+        ctx.fillStyle = "#ccc";
+        ctx.font = "16px sans-serif";
+        ctx.fillText("積んだ具材: " + (stack.length - 1), CANVAS_W / 2, 52);
+        return;
+      }
+
+      const topWorldY = -(stack.length - 1) * BLOCK_HEIGHT;
+      const visibleCount = 20;
+      const startIndex = Math.max(0, stack.length - visibleCount);
+
+      for (let i = startIndex; i < stack.length; i++) {
+        const block = stack[i];
+        const worldY = -i * BLOCK_HEIGHT;
+        const screenY = worldYToScreenY(worldY, topWorldY);
+        if (screenY > CANVAS_H) continue;
+        ctx.fillStyle = block.color;
+        ctx.fillRect(block.x, screenY, block.width, BLOCK_HEIGHT);
+      }
+
+      if (state === "playing" && movingBlock) {
+        ctx.fillStyle = movingBlock.color;
+        ctx.fillRect(movingBlock.x, ACTIVE_SCREEN_Y, movingBlock.width, BLOCK_HEIGHT);
+        ctx.fillStyle = "#eee";
+        ctx.font = "14px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(movingBlock.name, movingBlock.x + movingBlock.width / 2, ACTIVE_SCREEN_Y - 8);
+      }
+
+      if (state === "ready") {
+        ctx.fillStyle = "#ccc";
+        ctx.font = "20px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("スペース / クリックでスタート", CANVAS_W / 2, CANVAS_H / 2);
+      }
+    }
+
+    let lastFrameTime = performance.now();
+    function frame(now) {
+      const dt = (now - lastFrameTime) / 1000;
+      lastFrameTime = now;
+
+      if (state === "playing" && movingBlock) {
+        movingBlock.x += direction * MOVE_SPEED * dt;
+        if (movingBlock.x <= 0) {
+          movingBlock.x = 0;
+          direction = 1;
+        } else if (movingBlock.x + movingBlock.width >= CANVAS_W) {
+          movingBlock.x = CANVAS_W - movingBlock.width;
+          direction = -1;
+        }
+      }
+
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    resetStack();
+    updateUI();
+    requestAnimationFrame(frame);
+
+    startBtn.addEventListener("click", handleStart);
+    dropBtn.addEventListener("click", handleDrop);
+    canvas.addEventListener("click", handleAction);
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        handleAction();
+      }
+    });
+  </script>
+</body>
+</html>
