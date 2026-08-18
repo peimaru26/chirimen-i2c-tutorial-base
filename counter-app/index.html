@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>2つのカウンター</title>
+<style>
+  body {
+    font-family: sans-serif;
+    text-align: center;
+    padding-top: 40px;
+  }
+  .counter {
+    display: inline-block;
+    margin: 0 40px;
+  }
+  .value {
+    font-size: 4em;
+    margin: 10px 0;
+  }
+  .interval {
+    color: #666;
+  }
+  button {
+    font-size: 1.2em;
+    padding: 8px 16px;
+  }
+</style>
+</head>
+<body>
+  <h1>2つの非同期カウンター</h1>
+
+  <div class="counter">
+    <h2>カウンターA</h2>
+    <div class="value" id="valueA">0</div>
+    <div class="interval">間隔: <span id="intervalA"></span> ms</div>
+    <button id="btnA">高速化</button>
+  </div>
+
+  <div class="counter">
+    <h2>カウンターB</h2>
+    <div class="value" id="valueB">0</div>
+    <div class="interval">間隔: <span id="intervalB"></span> ms</div>
+    <button id="btnB">高速化</button>
+  </div>
+
+  <script>
+    function makeCounter(initialInterval, valueEl, intervalEl) {
+      let value = 0;
+      let interval = initialInterval;
+      let timerId = null;
+
+      function render() {
+        valueEl.textContent = value;
+        intervalEl.textContent = interval;
+      }
+
+      function tick() {
+        value = (value + 1) % 101;
+        render();
+      }
+
+      function restart() {
+        clearInterval(timerId);
+        timerId = setInterval(tick, interval);
+        render();
+      }
+
+      function speedUp() {
+        interval = interval / 2;
+        if (interval <= 100) {
+          interval = initialInterval;
+        }
+        restart();
+      }
+
+      restart();
+      return { speedUp };
+    }
+
+    const counterA = makeCounter(1000, document.getElementById("valueA"), document.getElementById("intervalA"));
+    const counterB = makeCounter(2000, document.getElementById("valueB"), document.getElementById("intervalB"));
+
+    document.getElementById("btnA").addEventListener("click", () => counterA.speedUp());
+    document.getElementById("btnB").addEventListener("click", () => counterB.speedUp());
+  </script>
+</body>
+</html>
