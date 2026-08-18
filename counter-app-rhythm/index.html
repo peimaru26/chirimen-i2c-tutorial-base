@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>2つの非同期カウンター - リズムタイミング</title>
+<style>
+  body {
+    font-family: sans-serif;
+    text-align: center;
+    padding-top: 40px;
+  }
+  .counter {
+    display: inline-block;
+    margin: 0 40px;
+    vertical-align: top;
+    width: 460px;
+  }
+  .track {
+    position: relative;
+    width: 460px;
+    height: 44px;
+    margin: 10px auto 6px;
+    background: #eee;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .zone-good {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 30%;
+    width: 40%;
+    background: #cfe0fa;
+  }
+  .zone-perfect {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 45%;
+    width: 10%;
+    background: #ffd699;
+  }
+  .center-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    background: #999;
+  }
+  .cursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #c33;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .value {
+    font-size: 3.4em;
+    margin: 6px 0;
+  }
+  .interval {
+    color: #666;
+  }
+  .combo {
+    color: #888;
+    margin-top: 4px;
+  }
+  .judgement {
+    height: 1.4em;
+    font-size: 1.3em;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .judgement.show {
+    opacity: 1;
+  }
+  .judgement.perfect { color: #e69500; }
+  .judgement.good { color: #1a5fb4; }
+  .judgement.miss { color: #c33; }
+  button {
+    font-size: 1.1em;
+    padding: 6px 14px;
+    margin: 4px;
+  }
+  button:disabled {
+    opacity: 0.4;
+  }
+</style>
+</head>
+<body>
+  <h1>2つの非同期カウンター - リズムタイミング</h1>
+  <p>カーソルが中央「0」に重なった瞬間に「高速化」を押すとPERFECT/GOOD、外すとMISS。100に到達するまでの最大コンボを競おう。</p>
+
+  <div class="counter" id="counterA">
+    <h2>カウンターA</h2>
+    <div class="track">
+      <div class="zone-good"></div>
+      <div class="zone-perfect"></div>
+      <div class="center-line"></div>
+      <div class="cursor" id="cursorA"></div>
+    </div>
+    <div class="value" id="valueA">0</div>
+    <div class="interval">間隔: <span id="intervalA"></span> ms</div>
+    <div class="combo">Combo: <span id="comboA">0</span> / Max: <span id="maxComboA">0</span></div>
+    <div class="judgement" id="judgeA"></div>
+    <div>
+      <button id="startA">スタート</button>
+      <button id="speedA">高速化</button>
+    </div>
+  </div>
+
+  <div class="counter" id="counterB">
+    <h2>カウンターB</h2>
+    <div class="track">
+      <div class="zone-good"></div>
+      <div class="zone-perfect"></div>
+      <div class="center-line"></div>
+      <div class="cursor" id="cursorB"></div>
+    </div>
+    <div class="value" id="valueB">0</div>
+    <div class="interval">間隔: <span id="intervalB"></span> ms</div>
+    <div class="combo">Combo: <span id="comboB">0</span> / Max: <span id="maxComboB">0</span></div>
+    <div class="judgement" id="judgeB"></div>
+    <div>
+      <button id="startB">スタート</button>
+      <button id="speedB">高速化</button>
+    </div>
+  </div>
+
+  <script>
+    const PERFECT_RANGE = 5;
+    const GOOD_RANGE = 20;
+
+    let audioCtx = null;
+    function playSound(type) {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const freq = type === "perfect" ? 880 : type === "good" ? 660 : 220;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    }
+
+    function makeCounter(initialInterval, els) {
+      let value = 0;
+      let interval = initialInterval;
+      let combo = 0;
+      let maxCombo = 0;
+      let started = false;
+      let finished = false;
+      let phase = 0; // 0..2 : 0->1 は左端から右端へ、1->2 は右端から左端へ
+      let position = -50; // -50(左端) 〜 +50(右端)、0が中央
+      let judgeTimeoutId = null;
+
+      function render() {
+        els.value.textContent = value;
+        els.interval.textContent = Math.round(interval);
+        els.combo.textContent = combo;
+        els.maxCombo.textContent = maxCombo;
+        els.speedBtn.disabled = !started || finished;
+      }
+
+      function updateCursor() {
+        els.cursor.style.left = (position + 50) + "%";
+      }
+
+      function tick() {
+        if (finished) return;
+        value += 1;
+        if (value >= 100) {
+          value = 100;
+          finished = true;
+        }
+        render();
+      }
+
+      function showJudgement(type, label) {
+        clearTimeout(judgeTimeoutId);
+        els.judge.textContent = label;
+        els.judge.className = "judgement show " + type;
+        judgeTimeoutId = setTimeout(() => {
+          els.judge.classList.remove("show");
+        }, 500);
+      }
+
+      function speedUp() {
+        if (!started || finished) return;
+        const dist = Math.abs(position);
+        const distLabel = " (" + dist.toFixed(1) + ")";
+
+        if (dist <= PERFECT_RANGE) {
+          interval = interval * 0.75;
+          combo += 1;
+          maxCombo = Math.max(maxCombo, combo);
+          showJudgement("perfect", "PERFECT!" + distLabel);
+          playSound("perfect");
+        } else if (dist <= GOOD_RANGE) {
+          interval = interval * 0.9;
+          combo += 1;
+          maxCombo = Math.max(maxCombo, combo);
+          showJudgement("good", "GOOD" + distLabel);
+          playSound("good");
+        } else {
+          interval = initialInterval;
+          combo = 0;
+          showJudgement("miss", "MISS..." + distLabel);
+          playSound("miss");
+        }
+
+        if (interval <= 300) {
+          interval = initialInterval;
+        }
+
+        render();
+      }
+
+      // スタートボタンで初期状態から開始（やり直しにも使う）
+      function start() {
+        value = 0;
+        interval = initialInterval;
+        combo = 0;
+        maxCombo = 0;
+        finished = false;
+        phase = 0;
+        position = -50;
+        started = true;
+        updateCursor();
+        render();
+      }
+
+      // カーソルの往復アニメーションを1フレーム分進め、中央通過を検知したらtickする
+      function advance(dtMs) {
+        if (!started || finished) return;
+        const halfPeriod = interval; // 端から端まで interval ms で移動
+        phase = (phase + dtMs / halfPeriod) % 2;
+        const newPosition = phase < 1 ? -50 + 100 * phase : 50 - 100 * (phase - 1);
+
+        if ((position < 0 && newPosition >= 0) || (position > 0 && newPosition <= 0)) {
+          tick();
+        }
+
+        position = newPosition;
+        updateCursor();
+      }
+
+      render();
+      updateCursor();
+      return { speedUp, start, advance };
+    }
+
+    const counterA = makeCounter(2000, {
+      value: document.getElementById("valueA"),
+      interval: document.getElementById("intervalA"),
+      combo: document.getElementById("comboA"),
+      maxCombo: document.getElementById("maxComboA"),
+      judge: document.getElementById("judgeA"),
+      cursor: document.getElementById("cursorA"),
+      speedBtn: document.getElementById("speedA"),
+    });
+
+    const counterB = makeCounter(3200, {
+      value: document.getElementById("valueB"),
+      interval: document.getElementById("intervalB"),
+      combo: document.getElementById("comboB"),
+      maxCombo: document.getElementById("maxComboB"),
+      judge: document.getElementById("judgeB"),
+      cursor: document.getElementById("cursorB"),
+      speedBtn: document.getElementById("speedB"),
+    });
+
+    document.getElementById("speedA").addEventListener("click", () => counterA.speedUp());
+    document.getElementById("speedB").addEventListener("click", () => counterB.speedUp());
+    document.getElementById("startA").addEventListener("click", () => counterA.start());
+    document.getElementById("startB").addEventListener("click", () => counterB.start());
+
+    let lastFrameTime = performance.now();
+    function frame(now) {
+      const dt = now - lastFrameTime;
+      lastFrameTime = now;
+      counterA.advance(dt);
+      counterB.advance(dt);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
