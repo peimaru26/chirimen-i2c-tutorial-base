@@ -96,6 +96,10 @@
     let direction = 1;
     let state = "ready"; // ready | playing | gameover
     let judgeTimeoutId = null;
+    let perfectStreak = 0;
+
+    const PERFECT_STREAK_BONUS = 3; // 連続PERFECTでボーナスが発生する回数
+    const BONUS_WIDTH = 20; // ボーナスで増える幅(px)
 
     function resetStack() {
       stack = [{
@@ -104,6 +108,7 @@
         color: BUN.color,
         name: BUN.name,
       }];
+      perfectStreak = 0;
     }
 
     function spawnMovingBlock() {
@@ -142,9 +147,21 @@
       const trimmed = movingBlock.width - overlap;
       let newBlock;
       if (trimmed <= PERFECT_TOLERANCE) {
-        newBlock = { x: top.x, width: top.width, color: movingBlock.color, name: movingBlock.name };
-        showJudgement("PERFECT!");
+        perfectStreak += 1;
+        let width = top.width;
+        let x = top.x;
+
+        if (perfectStreak % PERFECT_STREAK_BONUS === 0) {
+          width = Math.min(top.width + BONUS_WIDTH, CANVAS_W - 20);
+          x = Math.max(0, Math.min(top.x - (width - top.width) / 2, CANVAS_W - width));
+          showJudgement("PERFECT! BONUS+");
+        } else {
+          showJudgement("PERFECT!");
+        }
+
+        newBlock = { x, width, color: movingBlock.color, name: movingBlock.name };
       } else {
+        perfectStreak = 0;
         newBlock = { x: left, width: overlap, color: movingBlock.color, name: movingBlock.name };
       }
 
