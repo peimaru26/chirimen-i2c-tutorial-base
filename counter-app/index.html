@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>2つのカウンター</title>
+<title>2つのカウンター（レース）</title>
 <style>
   body {
     font-family: sans-serif;
@@ -12,6 +12,10 @@
   .counter {
     display: inline-block;
     margin: 0 40px;
+    vertical-align: top;
+  }
+  .counter.finished .value {
+    color: #2a9d2a;
   }
   .value {
     font-size: 4em;
@@ -21,67 +25,181 @@
     color: #666;
   }
   button {
-    font-size: 1.2em;
-    padding: 8px 16px;
+    font-size: 1.1em;
+    padding: 6px 14px;
+    margin: 4px;
+  }
+  button:disabled {
+    opacity: 0.4;
+  }
+  #banner {
+    margin-top: 30px;
+    font-size: 1.8em;
+    min-height: 1.4em;
+  }
+  #restartBtn {
+    display: none;
+    font-size: 1.3em;
+    padding: 10px 24px;
   }
 </style>
 </head>
 <body>
-  <h1>2つの非同期カウンター</h1>
+  <h1>2つの非同期カウンター - レース</h1>
 
-  <div class="counter">
+  <div class="counter" id="counterA">
     <h2>カウンターA</h2>
     <div class="value" id="valueA">0</div>
     <div class="interval">間隔: <span id="intervalA"></span> ms</div>
-    <button id="btnA">高速化</button>
+    <div>
+      <button id="speedA">高速化</button>
+      <button id="pauseA">一時停止</button>
+      <button id="resetA">リセット</button>
+    </div>
   </div>
 
-  <div class="counter">
+  <div class="counter" id="counterB">
     <h2>カウンターB</h2>
     <div class="value" id="valueB">0</div>
     <div class="interval">間隔: <span id="intervalB"></span> ms</div>
-    <button id="btnB">高速化</button>
+    <div>
+      <button id="speedB">高速化</button>
+      <button id="pauseB">一時停止</button>
+      <button id="resetB">リセット</button>
+    </div>
   </div>
 
+  <div id="banner"></div>
+  <button id="restartBtn">レース再スタート</button>
+
   <script>
-    function makeCounter(initialInterval, valueEl, intervalEl) {
+    function makeCounter(name, initialInterval, els, onFinish) {
       let value = 0;
       let interval = initialInterval;
       let timerId = null;
+      let paused = false;
+      let finished = false;
 
       function render() {
-        valueEl.textContent = value;
-        intervalEl.textContent = interval;
+        els.value.textContent = value;
+        els.interval.textContent = interval;
+        els.pauseBtn.textContent = paused ? "再開" : "一時停止";
+        els.pauseBtn.disabled = finished;
+        els.speedBtn.disabled = finished || paused;
+        els.container.classList.toggle("finished", finished);
       }
 
       function tick() {
-        value = (value + 1) % 101;
+        value += 1;
+        if (value >= 100) {
+          value = 100;
+          finish();
+        }
         render();
       }
 
-      function restart() {
+      function stopTimer() {
         clearInterval(timerId);
+        timerId = null;
+      }
+
+      function startTimer() {
+        stopTimer();
         timerId = setInterval(tick, interval);
-        render();
+      }
+
+      function finish() {
+        finished = true;
+        stopTimer();
+        onFinish(name);
       }
 
       function speedUp() {
+        if (finished || paused) return;
         interval = interval / 2;
         if (interval <= 100) {
           interval = initialInterval;
         }
-        restart();
+        startTimer();
+        render();
       }
 
-      restart();
-      return { speedUp };
+      function togglePause() {
+        if (finished) return;
+        paused = !paused;
+        if (paused) {
+          stopTimer();
+        } else {
+          startTimer();
+        }
+        render();
+      }
+
+      function reset() {
+        value = 0;
+        interval = initialInterval;
+        paused = false;
+        finished = false;
+        startTimer();
+        render();
+      }
+
+      function freeze() {
+        if (!finished) {
+          paused = true;
+          stopTimer();
+          render();
+        }
+      }
+
+      startTimer();
+      render();
+      return { speedUp, togglePause, reset, freeze };
     }
 
-    const counterA = makeCounter(1000, document.getElementById("valueA"), document.getElementById("intervalA"));
-    const counterB = makeCounter(2000, document.getElementById("valueB"), document.getElementById("intervalB"));
+    const bannerEl = document.getElementById("banner");
+    const restartBtn = document.getElementById("restartBtn");
+    let raceOver = false;
 
-    document.getElementById("btnA").addEventListener("click", () => counterA.speedUp());
-    document.getElementById("btnB").addEventListener("click", () => counterB.speedUp());
+    function onFinish(name) {
+      if (raceOver) return;
+      raceOver = true;
+      bannerEl.textContent = "カウンター" + name + " の勝ち！";
+      restartBtn.style.display = "inline-block";
+      counterA.freeze();
+      counterB.freeze();
+    }
+
+    const counterA = makeCounter("A", 1000, {
+      container: document.getElementById("counterA"),
+      value: document.getElementById("valueA"),
+      interval: document.getElementById("intervalA"),
+      speedBtn: document.getElementById("speedA"),
+      pauseBtn: document.getElementById("pauseA"),
+    }, onFinish);
+
+    const counterB = makeCounter("B", 2000, {
+      container: document.getElementById("counterB"),
+      value: document.getElementById("valueB"),
+      interval: document.getElementById("intervalB"),
+      speedBtn: document.getElementById("speedB"),
+      pauseBtn: document.getElementById("pauseB"),
+    }, onFinish);
+
+    document.getElementById("speedA").addEventListener("click", () => counterA.speedUp());
+    document.getElementById("speedB").addEventListener("click", () => counterB.speedUp());
+    document.getElementById("pauseA").addEventListener("click", () => counterA.togglePause());
+    document.getElementById("pauseB").addEventListener("click", () => counterB.togglePause());
+    document.getElementById("resetA").addEventListener("click", () => counterA.reset());
+    document.getElementById("resetB").addEventListener("click", () => counterB.reset());
+
+    restartBtn.addEventListener("click", () => {
+      raceOver = false;
+      bannerEl.textContent = "";
+      restartBtn.style.display = "none";
+      counterA.reset();
+      counterB.reset();
+    });
   </script>
 </body>
 </html>
