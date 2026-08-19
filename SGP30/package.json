@@ -1,0 +1,8 @@
+{
+  "name": "sgp30-example",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "node-web-i2c": "latest"
+  }
+}
