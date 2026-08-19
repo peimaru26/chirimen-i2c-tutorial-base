@@ -34,13 +34,17 @@ const i2cAccess = await requestI2CAccess();
 const i2cPort = i2cAccess.ports.get(1);
 const sgp30 = new SGP30(i2cPort, 0x58);
 await sgp30.init();
+console.log(`serial number: ${await sgp30.readSerialNumber()}`);
 
 // init() 直後から約15秒間は初期化フェーズのため、
 // eCO2 = 400ppm / tvoc = 0ppb の固定値が返ります。
 // また動的ベースライン補正のため、約1秒間隔で read() を呼び続ける必要があります。
 while (true) {
   const { eCO2, tvoc } = await sgp30.read();
-  console.log(`eCO2: ${eCO2} ppm, TVOC: ${tvoc} ppb`);
+  const { h2, ethanol } = await sgp30.readRaw();
+  console.log(
+    `eCO2: ${eCO2} ppm, TVOC: ${tvoc} ppb, raw H2: ${h2}, raw Ethanol: ${ethanol}`,
+  );
 
   await sleep(1000);
 }
@@ -48,8 +52,13 @@ while (true) {
 
 ## 動作確認のしかた
 
-1. `i2cdetect -y 1` で `0x58` が見えることを確認する
-2. `node main.js` を実行し、`init()` がエラーなく通ることを確認する
-3. 起動から 15 秒経過後、値が固定値から動き出すことを確認する
-4. アルコール系のウェットティッシュや消毒液を近づけると TVOC / eCO2 が跳ね上がる
-   （元の値に戻るまでには数分かかります）
+| 確認項目             | やりかた                                         | 期待される結果                                     |
+| -------------------- | ------------------------------------------------ | -------------------------------------------------- |
+| I2C の疎通           | `i2cdetect -y 1`                                 | `0x58` が表示される                                |
+| `init()`             | `node main.js`                                   | エラーが出ずに次に進む                             |
+| `readSerialNumber()` | 何度か再実行する                                 | 毎回同じ 12 桁の16進文字列が出る（全ゼロではない） |
+| 初期化フェーズ       | 起動から15秒待つ                                 | 400ppm / 0ppb の固定値から実測値に切り替わる       |
+| `read()`             | アルコール系ウェットティッシュや消毒液を近づける | TVOC / eCO2 が跳ね上がる（元に戻るまで数分かかる） |
+| `readRaw()`          | 息を吹きかける                                   | raw H2 の値が動く（生値なので単位はティック）      |
+
+ベースラインの保存・復元は [sgp30_baseline](../sgp30_baseline/) を参照してください。
