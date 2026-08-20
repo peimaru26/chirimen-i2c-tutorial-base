@@ -95,8 +95,11 @@ class SGP30 {
   /**
    * ベースライン補正アルゴリズムの内部状態を取得する。
    * ppm / ppb ではなく、setBaseline() に渡すための不透明な値。
-   * 十分に安定するまでには最大 12 時間の連続運転が必要。
-   * @returns {Promise<{eCO2: number, tvoc: number}>}
+   *
+   * 確立していない間は { eCO2: 0, tvoc: 0 } が返る (実測では init() から約15秒で有効化)。
+   * ただし非ゼロになっても保存してよいわけではなく、Sensirion のドライバー統合ガイドは
+   * 保存できるようになるまで12時間の連続運転を求めている。
+   * @returns {Promise<{eCO2: number, tvoc: number}>} 0 のときは未確立
    */
   async getBaseline() {
     // データシート: 応答は (CO2eq, TVOC) の順
@@ -106,6 +109,12 @@ class SGP30 {
 
   /**
    * 保存しておいたベースラインを復元する。init() の後に呼ぶ必要がある。
+   *
+   * 保存から1週間以上経った値は渡してはいけない (Sensirion のドライバー統合ガイド)。
+   * 古い基準で補正すると測定値がずれる。値の保存・保存時刻の記録・鮮度の判定は
+   * いずれもアプリケーション側の責任で、このドライバーは関与しない。
+   *
+   * 渡す値は getBaseline() が返したものをそのまま使うこと。
    * @param {number} eCO2 getBaseline() で得た eCO2。0 - 65535 の整数
    * @param {number} tvoc getBaseline() で得た tvoc。0 - 65535 の整数
    */

@@ -61,4 +61,9 @@ while (true) {
 | `read()`             | アルコール系ウェットティッシュや消毒液を近づける | TVOC / eCO2 が跳ね上がる（元に戻るまで数分かかる） |
 | `readRaw()`          | 息を吹きかける                                   | raw H2 の値が動く（生値なので単位はティック）      |
 
-ベースラインの保存・復元は [sgp30_baseline](../SGP30/readme_baseline.md) を参照してください。
+`readRaw()` はベースライン補正を受けないため、初期化フェーズの15秒間も実際の値が返ります
+（ただしヒーターの暖機中は値が動き続けます）。
+
+ベースラインの取得・復元（`getBaseline()` / `setBaseline()`）については
+[ドライバのリファレンス](https://github.com/chirimen-oh/chirimen-drivers/tree/master/packages/sgp30)
+を参照してください。
