@@ -68,6 +68,13 @@ Raspberry Pi Zero + M5Stack TVOC/eCO2 Unit (U088) で確認しました。
   （eCO2 の変化倍率が H2 の濃度換算比と平均誤差 4.3% で一致）
 - getBaseline(): 未確立時は 0、init() から約15秒で有効化。3セッションで再現
 - setBaseline(): 現在値と異なる値を書いて読み戻し、元の値に復元できることを確認
+
+さらに、CHIRIMEN_REAL_DEVICE_VERIFICATION.md の手順に従い、packages/sgp30/ を
+.driver-under-test/ へコピーして sudo npm link し、@chirimen/sgp30 として import した
+状態でも動作を確認しました。package.json の exports 経由での解決が働くことを確認しています。
+シンボリックリンクであること (node_modules/@chirimen/sgp30 -> ../../../.driver-under-test/sgp30)、
+シリアル番号が相対 import 時と一致すること (000001f9293c)、
+検証用ディレクトリと packages/sgp30/ に差分がないこと (diff -r が空) を確認済みです。
 ```
 
 ---

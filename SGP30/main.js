@@ -1,5 +1,5 @@
 import { requestI2CAccess } from "node-web-i2c";
-import SGP30 from "./sgp30.js";
+import SGP30 from "@chirimen/sgp30";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const i2cAccess = await requestI2CAccess();
