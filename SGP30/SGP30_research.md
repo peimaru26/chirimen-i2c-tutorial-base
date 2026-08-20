@@ -12,11 +12,11 @@
 
 ガイドの必須 3 チェック:
 
-| 確認項目 | 結果 | 根拠 |
-|---|---|---|
-| 既存ドライバーと重複していないか | **OK（重複なし）** | chirimen-drivers の 68 パッケージに `sgp30` は存在しない。近縁は `sgp40` / `scd40` / `ccs811` / `ens160` |
-| しっかりしたデータシートがあるか | **OK（◎）** | Sensirion 公式 PDF（Version 0.92, 2019-04）。全コマンドの hex・応答フォーマット・CRC パラメータ・タイミングが明記 |
-| I2C の「方言」を使っていないか | **OK（ただし要注意）** | ファームウェア転送等はなし。ただし「レジスタ番地」方式ではなく **Sensirion 方式（16bit コマンド + CRC 付き 2 バイトワード）**。→ 3章で対応可能と確認済み |
+| 確認項目                         | 結果                   | 根拠                                                                                                                                                     |
+| -------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 既存ドライバーと重複していないか | **OK（重複なし）**     | chirimen-drivers の 68 パッケージに `sgp30` は存在しない。近縁は `sgp40` / `scd40` / `ccs811` / `ens160`                                                 |
+| しっかりしたデータシートがあるか | **OK（◎）**            | Sensirion 公式 PDF（Version 0.92, 2019-04）。全コマンドの hex・応答フォーマット・CRC パラメータ・タイミングが明記                                        |
+| I2C の「方言」を使っていないか   | **OK（ただし要注意）** | ファームウェア転送等はなし。ただし「レジスタ番地」方式ではなく **Sensirion 方式（16bit コマンド + CRC 付き 2 バイトワード）**。→ 3章で対応可能と確認済み |
 
 ### 近縁デバイスの存在が追い風になる
 
@@ -25,33 +25,39 @@
 
 ### 選定にあたっての注意点（デバイス固有の癖）
 
-| 癖 | 内容 | 影響 |
-|---|---|---|
-| **1 秒周期の呼び出しが必須** | `sgp30_iaq_init` 後は 1s 間隔で `measure_iaq` を送り続けないと、動的ベースライン補正アルゴリズムが正しく動かない | example は `setInterval(..., 1000)` 固定。周期を変えられる API にしない方が良い |
-| **起動後 15 秒は固定値** | 初期化フェーズ中は eCO2=400ppm / TVOC=0ppb を返す | 「動作確認したのに値が動かない！」の第一の原因。README とコメントに必ず書く |
-| **ベースラインの長期較正** | 実用精度には最大 12 時間の運転が必要。`get/set_baseline` で外部保存・復元できる | Typical ユースケースではない。**実装しない**（ガイドの「Typical に全集中」に従う） |
-| **チップ本体は 1.8V 動作** | SGP30 の VDD は 1.62〜1.98V。3.3V/5V 直結は不可 | モジュール基板側のレギュレータ／レベル変換に依存 → 下記 |
+| 癖                           | 内容                                                                                                             | 影響                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **1 秒周期の呼び出しが必須** | `sgp30_iaq_init` 後は 1s 間隔で `measure_iaq` を送り続けないと、動的ベースライン補正アルゴリズムが正しく動かない | example は `setInterval(..., 1000)` 固定。周期を変えられる API にしない方が良い    |
+| **起動後 15 秒は固定値**     | 初期化フェーズ中は eCO2=400ppm / TVOC=0ppb を返す                                                                | 「動作確認したのに値が動かない！」の第一の原因。README とコメントに必ず書く        |
+| **ベースラインの長期較正**   | 実用精度には最大 12 時間の運転が必要。`get/set_baseline` で外部保存・復元できる                                  | Typical ユースケースではない。**実装しない**（ガイドの「Typical に全集中」に従う） |
+| **チップ本体は 1.8V 動作**   | SGP30 の VDD は 1.62〜1.98V。3.3V/5V 直結は不可                                                                  | 基板上の LDO が 1.8V を生成。VCC は 3.3V を与える → 下記                           |
 
 ### 電源まわり（要実機確認）
 
-- M5Stack 公式ドキュメント上のユニット給電は **5V**（HY2.0-4P: 黒=GND / 赤=5V / 黄=SDA / 白=SCL）。
-- M5Stack の PORT.A は「5V 給電 + 3.3V ロジックの I2C」なので、**基板上にレギュレータとレベル変換が載っている可能性が高い**が、
-  公開されている回路図が画像形式のみで**部品構成を一次資料で確認できなかった**（M5_Hardware リポジトリには筐体データしかない）。
-- **推奨アクション**: Raspberry Pi に繋ぐ前に、ユニットに 5V を与えた状態で **SDA/SCL の無通信時電圧をテスターで実測**し、3.3V であることを確認する。
-  5V が乗っていた場合は Pi の GPIO に直結してはいけない。
-- 3.3V のみでの動作可否は公式記述なし。**5V 給電 + 3.3V ロジック**の構成を前提にする。
+> **【調査後に解決】** 本節は調査時点で「回路図が画像形式のみで確認できない」として保留していたが、
+> のちに回路図を確認し、**結論が逆になった**ため上書きする。
+
+- M5Stack 公式ドキュメント上のユニット給電表記は **5V**（HY2.0-4P: 黒=GND / 赤=5V / 黄=SDA / 白=SCL）。
+- 回路図を確認した結果、基板上には **RT9193-1.8V LDO** と **BSS138 双方向レベルシフタ**が載っている。
+  ただし**レベルシフタの高圧側プルアップがコネクタの VCC ピンに接続されている**ため、
+  **I2C のロジックレベルは VCC に与えた電圧そのままになる**。
+- **結論: Raspberry Pi に繋ぐ場合、VCC は 3.3V を与える。** 5V を与えると Pi の SDA/SCL に
+  5V が乗り、GPIO を破損させるおそれがある。表示が 5V なのは M5Stack のホスト（ESP32 の PORT.A）
+  前提であり、Pi では当てはまらない。
+- SGP30 チップ本体（1.62〜1.98V）は基板上の LDO から駆動されるため、VCC 3.3V で問題ない。
+- **3.3V 給電で実機動作を確認済み**（Raspberry Pi Zero、シリアル番号 `000001f9293c`）。
 
 ---
 
 ## 2. 資料調査 — 3点セット（＋CHIRIMEN 内の参考実装）
 
-| 資料 | URL | 用途 |
-|---|---|---|
-| **データシート**（Sensirion 公式） | https://sensirion.com/media/documents/984E0DD5/61644B8B/Sensirion_Gas_Sensors_Datasheet_SGP30.pdf | コマンド hex・CRC・タイミングの原本。**最終的な正はこれ** |
-| **Arduino example (.ino)** | https://github.com/adafruit/Adafruit_SGP30/blob/master/examples/sgp30test/sgp30test.ino | Typical ユースケースの確認 |
-| **Arduino driver (.cpp/.h)** | https://github.com/adafruit/Adafruit_SGP30 | 移植元。初期化手順・定数・CRC 検証 |
-| ＋ **CHIRIMEN の同系ドライバー** | https://github.com/chirimen-oh/chirimen-drivers `packages/scd40` | Sensirion 方式の CHIRIMEN 流儀の書き方（CRC8・writeBytes/readBytes の使い方） |
-| （参考）M5Stack ユニット資料 | https://docs.m5stack.com/en/unit/tvoc | ピンアサイン・I2C アドレス |
+| 資料                               | URL                                                                                               | 用途                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **データシート**（Sensirion 公式） | https://sensirion.com/media/documents/984E0DD5/61644B8B/Sensirion_Gas_Sensors_Datasheet_SGP30.pdf | コマンド hex・CRC・タイミングの原本。**最終的な正はこれ**                     |
+| **Arduino example (.ino)**         | https://github.com/adafruit/Adafruit_SGP30/blob/master/examples/sgp30test/sgp30test.ino           | Typical ユースケースの確認                                                    |
+| **Arduino driver (.cpp/.h)**       | https://github.com/adafruit/Adafruit_SGP30                                                        | 移植元。初期化手順・定数・CRC 検証                                            |
+| ＋ **CHIRIMEN の同系ドライバー**   | https://github.com/chirimen-oh/chirimen-drivers `packages/scd40`                                  | Sensirion 方式の CHIRIMEN 流儀の書き方（CRC8・writeBytes/readBytes の使い方） |
+| （参考）M5Stack ユニット資料       | https://docs.m5stack.com/en/unit/tvoc                                                             | ピンアサイン・I2C アドレス                                                    |
 
 ### 調査で答えを出す質問への回答
 
@@ -65,7 +71,7 @@
 ※ 同じ Sensirion の SGP40 は 0x59 なので混同しないこと。
 
 **Q. 対応電圧は？**
-チップ 1.62〜1.98V / ユニットは 5V 給電（1章の注意参照）。
+SGP30 チップ本体 1.62〜1.98V。**ユニットの VCC は 3.3V で駆動する**（1章の結論を参照）。
 
 **Q. CHIRIMEN の電文で足りるか？**
 **足りる。** Arduino 側は `Wire.beginTransmission → write(2バイトのコマンド) → endTransmission` と `Wire.requestFrom(addr, N)` の 2 パターンのみ。
@@ -73,17 +79,17 @@
 
 ### コマンド一覧（データシート原本より）
 
-| コマンド | Hex | 応答 | 測定時間 | 今回使う |
-|---|---|---|---|---|
-| Init_air_quality | `0x2003` | なし | 2〜10 ms | ✅ init() |
-| Measure_air_quality | `0x2008` | 6 byte | 10〜12 ms | ✅ read() |
-| Get_feature_set | `0x202F` | 3 byte | 1〜10 ms | ✅ init() の疎通確認 |
-| Get_serial_id | `0x3682` | 9 byte | 0.5 ms | △ init() の疎通確認（任意） |
-| Measure_raw | `0x2050` | 6 byte | 20〜25 ms | ✗ |
-| Get_baseline | `0x2015` | 6 byte | 1〜10 ms | ✗ |
-| Set_baseline | `0x201E` | なし | 1〜10 ms | ✗ |
-| Set_humidity | `0x2061` | なし | 1〜10 ms | ✗ |
-| Measure_test | `0x2032` | 3 byte | 200〜220 ms | ✗ |
+| コマンド            | Hex      | 応答   | 測定時間    | 今回使う                    |
+| ------------------- | -------- | ------ | ----------- | --------------------------- |
+| Init_air_quality    | `0x2003` | なし   | 2〜10 ms    | ✅ init()                   |
+| Measure_air_quality | `0x2008` | 6 byte | 10〜12 ms   | ✅ read()                   |
+| Get_feature_set     | `0x202F` | 3 byte | 1〜10 ms    | ✅ init() の疎通確認        |
+| Get_serial_id       | `0x3682` | 9 byte | 0.5 ms      | △ init() の疎通確認（任意） |
+| Measure_raw         | `0x2050` | 6 byte | 20〜25 ms   | ✗                           |
+| Get_baseline        | `0x2015` | 6 byte | 1〜10 ms    | ✗                           |
+| Set_baseline        | `0x201E` | なし   | 1〜10 ms    | ✗                           |
+| Set_humidity        | `0x2061` | なし   | 1〜10 ms    | ✗                           |
+| Measure_test        | `0x2032` | 3 byte | 200〜220 ms | ✗                           |
 
 ### データフォーマット
 
@@ -94,13 +100,13 @@
 
 ### CRC-8 パラメータ
 
-| 項目 | 値 |
-|---|---|
-| 多項式 | `0x31` (x^8 + x^5 + x^4 + 1) |
-| 初期値 | `0xFF` |
-| 入力/出力リフレクト | なし |
-| 最終 XOR | `0x00` |
-| 検算例 | CRC(0xBEEF) = `0x92` |
+| 項目                | 値                           |
+| ------------------- | ---------------------------- |
+| 多項式              | `0x31` (x^8 + x^5 + x^4 + 1) |
+| 初期値              | `0xFF`                       |
+| 入力/出力リフレクト | なし                         |
+| 最終 XOR            | `0x00`                       |
+| 検算例              | CRC(0xBEEF) = `0x92`         |
 
 → **`packages/scd40/scd40.js` の `_crc8()` と完全に同一**。実装時はそちらを踏襲する（下記）。
 
@@ -143,35 +149,35 @@ SGP30 は「レジスタ番地」という概念を持たず、2 バイトのコ
 
 node-web-i2c（CHIRIMEN の実装）が追加している 4 メソッドの実体を確認した:
 
-| メソッド | 内部実装 | 実際のバス上の動作 |
-|---|---|---|
-| `writeBytes(bytes)` | `bus.i2cWrite()` | **plain I2C write**。番地なしで生バイト列を送る |
-| `readBytes(length)` | `bus.i2cRead()` | **plain I2C read**。番地を送らず N バイト読む |
-| `writeByte(byte)` | `bus.sendByte()` | SMBus Send Byte（1 バイトだけ送る） |
-| `readByte()` | `bus.receiveByte()` | SMBus Receive Byte（番地なしで 1 バイト読む） |
-| `read8/write8/read16/write16` | `bus.readByte/writeByte/readWord/writeWord` | **SMBus 形式（レジスタ番地付き）** |
+| メソッド                      | 内部実装                                    | 実際のバス上の動作                              |
+| ----------------------------- | ------------------------------------------- | ----------------------------------------------- |
+| `writeBytes(bytes)`           | `bus.i2cWrite()`                            | **plain I2C write**。番地なしで生バイト列を送る |
+| `readBytes(length)`           | `bus.i2cRead()`                             | **plain I2C read**。番地を送らず N バイト読む   |
+| `writeByte(byte)`             | `bus.sendByte()`                            | SMBus Send Byte（1 バイトだけ送る）             |
+| `readByte()`                  | `bus.receiveByte()`                         | SMBus Receive Byte（番地なしで 1 バイト読む）   |
+| `read8/write8/read16/write16` | `bus.readByte/writeByte/readWord/writeWord` | **SMBus 形式（レジスタ番地付き）**              |
 
 → **`writeBytes()` と `readBytes()` の 2 つだけで SGP30 の全通信が成立する。実現可能。**
 
 ### 3-3. Arduino Wire → Web I2C 対応表（SGP30 版）
 
-| やりたいこと | Arduino (Adafruit_SGP30) | Web I2C (node-web-i2c) |
-|---|---|---|
-| 16bit コマンドを送る | `beginTransmission(0x58)` + `write(0x20)` + `write(0x08)` + `endTransmission()` | `await this.i2cSlave.writeBytes([0x20, 0x08])` |
-| 測定完了待ち | `delay(12)` | `await this.wait(12)` |
-| CRC 付き N バイト読む | `requestFrom(0x58, 6)` + `read()`×6 | `await this.i2cSlave.readBytes(6)` → `Uint8Array` |
-| 16bit 値の合成 | `(reply[0] << 8) \| reply[1]` | 同じ（**ビッグエンディアン**） |
-| CRC 検証 | `generateCRC()` | scd40.js の `_crc8()` を流用 |
+| やりたいこと          | Arduino (Adafruit_SGP30)                                                        | Web I2C (node-web-i2c)                            |
+| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------- |
+| 16bit コマンドを送る  | `beginTransmission(0x58)` + `write(0x20)` + `write(0x08)` + `endTransmission()` | `await this.i2cSlave.writeBytes([0x20, 0x08])`    |
+| 測定完了待ち          | `delay(12)`                                                                     | `await this.wait(12)`                             |
+| CRC 付き N バイト読む | `requestFrom(0x58, 6)` + `read()`×6                                             | `await this.i2cSlave.readBytes(6)` → `Uint8Array` |
+| 16bit 値の合成        | `(reply[0] << 8) \| reply[1]`                                                   | 同じ（**ビッグエンディアン**）                    |
+| CRC 検証              | `generateCRC()`                                                                 | scd40.js の `_crc8()` を流用                      |
 
 ### 3-4. 実装時の落とし穴
 
-| 落とし穴 | 対策 |
-|---|---|
-| `read16()` を使いたくなる | **使わない**。①レジスタ番地を勝手に付ける ②SMBus Read Word は**リトルエンディアン**なので SGP30（ビッグエンディアン）と逆になる |
-| `readBytes()` の返り値 | `number[]` ではなく **`Uint8Array`**。`slice()` の挙動に注意（`_crc8()` に渡す際は scd40 同様 `ans.slice(i, i+2)` で OK） |
-| SGP40 ドライバーの真似をしない | `packages/sgp40` の `Read()` は `writeByte(this.slaveAddress)` を打ってから `readBytes(3)` していて不自然（アドレスをデータとして送っている）。**SCD40 方式（`writeBytes(cmd)` → `wait()` → `readBytes(n)`）に倣うこと** |
-| コマンドと読み出しの間に STOP が入る | `i2cWrite` と `i2cRead` は別トランザクションなので STOP が入るが、Sensirion 仕様上これで正しく、**SCD40 で実績あり**。Repeated Start は不要 |
-| ポーリングの無限ループ | SGP30 は固定待ち時間方式なので原則ポーリング不要。入れる場合は必ず上限回数を設ける |
+| 落とし穴                             | 対策                                                                                                                                                                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `read16()` を使いたくなる            | **使わない**。①レジスタ番地を勝手に付ける ②SMBus Read Word は**リトルエンディアン**なので SGP30（ビッグエンディアン）と逆になる                                                                                          |
+| `readBytes()` の返り値               | `number[]` ではなく **`Uint8Array`**。`slice()` の挙動に注意（`_crc8()` に渡す際は scd40 同様 `ans.slice(i, i+2)` で OK）                                                                                                |
+| SGP40 ドライバーの真似をしない       | `packages/sgp40` の `Read()` は `writeByte(this.slaveAddress)` を打ってから `readBytes(3)` していて不自然（アドレスをデータとして送っている）。**SCD40 方式（`writeBytes(cmd)` → `wait()` → `readBytes(n)`）に倣うこと** |
+| コマンドと読み出しの間に STOP が入る | `i2cWrite` と `i2cRead` は別トランザクションなので STOP が入るが、Sensirion 仕様上これで正しく、**SCD40 で実績あり**。Repeated Start は不要                                                                              |
+| ポーリングの無限ループ               | SGP30 は固定待ち時間方式なので原則ポーリング不要。入れる場合は必ず上限回数を設ける                                                                                                                                       |
 
 ---
 
