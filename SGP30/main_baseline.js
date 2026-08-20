@@ -35,27 +35,39 @@ if (baseline.eCO2 === 0 && baseline.tvoc === 0) {
   );
 }
 
-// --- 往復テスト (非破壊) -----------------------------------------------
+// --- パラメータ順と書き込みの検証 -------------------------------------
 // setBaseline() の電文はデータシート上 (TVOC, eCO2) の順ですが、
-// getBaseline() の応答は (eCO2, TVOC) の順です。ドライバーがこの入れ替えを
-// 正しく吸収できているかを、現在値を書き戻して読み直すことで確認します。
-// 同じ値を書き戻すだけなのでセンサーの状態は変わりません。
-await sgp30.setBaseline(baseline.eCO2, baseline.tvoc);
+// getBaseline() の応答は (eCO2, TVOC) の順です。この入れ替えをドライバーが
+// 正しく吸収できているかを確認します。
+//
+// 現在値をそのまま書き戻す方式は使えません。setBaseline() が無視された場合でも
+// getBaseline() はアルゴリズム自身の値 (= 書いた値と同じ) を返すため、
+// 「書き込みが効いた」と「無視された」を区別できないからです。
+// そこで現在値とは異なる既知の値を一度書き込んで確認し、そのあと元の値に戻します。
+const probe = { eCO2: 0x1234, tvoc: 0x5678 };
+await sgp30.setBaseline(probe.eCO2, probe.tvoc);
 const echo = await sgp30.getBaseline();
-console.log("baseline round-trip:", baseline, "->", echo);
+console.log("probe:", probe, "->", echo);
 
-if (echo.eCO2 === baseline.tvoc && echo.tvoc === baseline.eCO2) {
+if (echo.eCO2 === probe.tvoc && echo.tvoc === probe.eCO2) {
   throw new Error(
     "setBaseline / getBaseline のパラメータ順が一致していません (TVOC と eCO2 が入れ替わっています)",
   );
-} else if (echo.eCO2 !== baseline.eCO2 || echo.tvoc !== baseline.tvoc) {
-  // アルゴリズムが学習を進めて値が更新された可能性。入れ替わりとは区別します。
-  console.warn("値が変化しました。アルゴリズムが更新した可能性があります");
-} else if (baseline.eCO2 === baseline.tvoc) {
-  console.warn(
-    "eCO2 と TVOC のベースラインが同値のため、順番の入れ替わりは検出できません",
+}
+if (echo.eCO2 !== probe.eCO2 || echo.tvoc !== probe.tvoc) {
+  throw new Error(
+    `setBaseline() が反映されていません (期待 ${JSON.stringify(probe)} / 実際 ${JSON.stringify(echo)})`,
   );
 }
+
+// 元のベースラインに戻す
+await sgp30.setBaseline(baseline.eCO2, baseline.tvoc);
+const restored = await sgp30.getBaseline();
+console.log("restore:", baseline, "->", restored);
+if (restored.eCO2 !== baseline.eCO2 || restored.tvoc !== baseline.tvoc) {
+  throw new Error("元のベースラインに戻せませんでした");
+}
+console.log("パラメータ順・書き込み・復元をすべて確認しました");
 
 // --- 測定とベースラインの定期取得 -------------------------------------
 // 実運用では取得した値を保存時刻とともにファイル等に記録し、次回起動時に復元します。
