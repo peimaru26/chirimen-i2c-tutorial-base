@@ -61,4 +61,4 @@ while (true) {
 | `read()`             | アルコール系ウェットティッシュや消毒液を近づける | TVOC / eCO2 が跳ね上がる（元に戻るまで数分かかる） |
 | `readRaw()`          | 息を吹きかける                                   | raw H2 の値が動く（生値なので単位はティック）      |
 
-ベースラインの保存・復元は [sgp30_baseline](../sgp30_baseline/) を参照してください。
+ベースラインの保存・復元は [sgp30_baseline](../SGP30/readme_baseline.md) を参照してください。
